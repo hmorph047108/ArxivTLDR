@@ -110,6 +110,7 @@ def generate_daily_digest(
         to_email=email,
         subject=f"ArXiv Daily Digest – {date.today().strftime('%B %d, %Y')}",
         html_body=html_body,
+        verbose=True  # Enable detailed logging for CLI usage
     )
     
     if success:

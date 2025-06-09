@@ -42,8 +42,10 @@ Required variables:
 
 **SendGrid API (Optional):**
 1. Sign up at [SendGrid](https://sendgrid.com/)
-2. Create an API key with Mail Send permissions
-3. Add it to your `.env` file
+2. Verify your sender email address in SendGrid
+3. Create an API key with Mail Send permissions
+4. Add it to your `.env` file as `SENDGRID_API_KEY`
+5. Test your configuration: `python test_email.py --to your@email.com`
 
 ### 4. Run the App
 ```bash
@@ -198,9 +200,12 @@ HTML emails include:
 - arXiv may have limited recent submissions
 
 **"Email not sent"**
-- Verify `SENDGRID_API_KEY` is correct
-- Check SendGrid account status and permissions
+- Test first: `python test_email.py --to your@email.com`
+- Verify `SENDGRID_API_KEY` format: should start with `SG.`
+- Check SendGrid account status and permissions (Mail Send required)
 - Ensure sender email is verified in SendGrid
+- Check SendGrid quotas and billing status
+- Look for emails in spam folder
 
 **App won't start**
 - Install all requirements: `pip install -r requirements.txt`

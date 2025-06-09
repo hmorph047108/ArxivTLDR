@@ -231,24 +231,71 @@ def fetch_papers(keywords: str, max_papers: int, days_back: int = 1,
     return [paper for paper, score in papers_with_scores[:max_papers]]
 
 
-def send_email(to_email: str, subject: str, html_body: str) -> bool:
-    """Send email via SendGrid. Returns True if successful."""
+def send_email(to_email: str, subject: str, html_body: str, verbose: bool = False) -> bool:
+    """Send email via SendGrid with comprehensive error handling and logging."""
     if not SENDGRID_API_KEY:
-        st.error("SENDGRID_API_KEY not set – skipping email")
+        if verbose:
+            print("❌ SENDGRID_API_KEY not set – skipping email")
+        else:
+            st.error("SENDGRID_API_KEY not set – skipping email")
         return False
     
     try:
+        # Create SendGrid client
         sg = SendGridAPIClient(api_key=SENDGRID_API_KEY)
-        mail = Mail(
+        
+        # Create mail object
+        message = Mail(
             from_email=FROM_EMAIL,
             to_emails=to_email,
             subject=subject,
-            html_content=html_body,
+            html_content=html_body
         )
-        response = sg.send(mail)
-        return response.status_code == 202
+        
+        # Send email
+        response = sg.send(message)
+        
+        # Log response details
+        if verbose:
+            print(f"📧 SendGrid Response Status: {response.status_code}")
+            if response.status_code == 202:
+                print("✅ Email sent successfully!")
+            else:
+                print(f"⚠️ Unexpected status code: {response.status_code}")
+                print(f"Response body: {response.body}")
+                print(f"Response headers: {response.headers}")
+        
+        # Check if successful (202 is SendGrid's success code)
+        if response.status_code == 202:
+            return True
+        else:
+            if not verbose:
+                st.error(f"SendGrid returned status code {response.status_code}")
+            return False
+            
     except Exception as e:
-        st.error(f"Failed to send email: {str(e)}")
+        # Enhanced error handling
+        error_msg = str(e)
+        
+        # Check for common SendGrid errors
+        if "API key" in error_msg.lower() or "unauthorized" in error_msg.lower():
+            detailed_error = "Invalid SendGrid API key. Please check your SENDGRID_API_KEY."
+        elif "forbidden" in error_msg.lower():
+            detailed_error = "SendGrid API access forbidden. Check your API key permissions."
+        elif "bad request" in error_msg.lower():
+            detailed_error = "Invalid email format or content. Check sender/recipient emails."
+        elif "rate limit" in error_msg.lower():
+            detailed_error = "SendGrid rate limit exceeded. Try again later."
+        elif "quota" in error_msg.lower() or "billing" in error_msg.lower():
+            detailed_error = "SendGrid quota exceeded or billing issue. Check your account."
+        else:
+            detailed_error = f"SendGrid error: {error_msg}"
+        
+        if verbose:
+            print(f"❌ Failed to send email: {detailed_error}")
+        else:
+            st.error(f"Failed to send email: {detailed_error}")
+        
         return False
 
 
@@ -300,9 +347,55 @@ with st.sidebar:
     
     if SENDGRID_API_KEY:
         st.success("✅ SendGrid configured")
+        
+        # Test email functionality
+        with st.expander("🧪 Test Email Configuration"):
+            test_email = st.text_input("Test email address:", placeholder="your@email.com")
+            if st.button("📧 Send Test Email") and test_email:
+                with st.spinner("Sending test email..."):
+                    from datetime import date
+                    test_content = f"""
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                        <h2 style="color: #1a73e8;">🧪 ArXiv Digest - Email Test</h2>
+                        <p>This is a test email to verify your SendGrid configuration.</p>
+                        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px;">
+                            <h3 style="color: #28a745; margin-top: 0;">✅ Configuration Test Successful!</h3>
+                            <p>If you're reading this, your email setup is working correctly.</p>
+                            <ul>
+                                <li>SendGrid API connection verified</li>
+                                <li>Email delivery working</li>
+                                <li>Ready for daily digest automation!</li>
+                            </ul>
+                        </div>
+                        <p style="color: #6c757d; font-size: 12px; margin-top: 20px;">
+                            Test sent on {date.today().strftime('%B %d, %Y')}
+                        </p>
+                    </div>
+                    """
+                    
+                    success = send_email(
+                        to_email=test_email,
+                        subject="ArXiv Digest - Email Configuration Test",
+                        html_body=test_content
+                    )
+                    
+                    if success:
+                        st.success("✅ Test email sent! Check your inbox.")
+                    else:
+                        st.error("❌ Test email failed. Check your SendGrid configuration.")
     else:
         st.warning("⚠️ SendGrid not configured")
         st.info("Email delivery disabled")
+        
+        with st.expander("🔧 SendGrid Setup Guide"):
+            st.markdown("""
+            **To enable email delivery:**
+            1. Sign up at [SendGrid](https://sendgrid.com/)
+            2. Verify your sender email address
+            3. Create an API key with Mail Send permissions
+            4. Add `SENDGRID_API_KEY=SG.your_key_here` to your `.env` file
+            5. Restart the app and test email functionality
+            """)
     
     st.markdown("---")
     
