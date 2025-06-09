@@ -7,8 +7,10 @@ A minimal Streamlit application that
 4. Displays the summaries on‑screen and emails them via SendGrid.
 
 Environment variables required:
-  GOOGLE_API_KEY   – Google Gemini credentials
-  SENDGRID_API_KEY – SendGrid credentials
+  OPENROUTER_API_KEY – OpenRouter API key for Gemini Flash access
+  SENDGRID_API_KEY   – SendGrid credentials (optional)
+  OPENROUTER_SITE_URL – Your site URL (optional, for rankings)
+  OPENROUTER_SITE_NAME – Your site name (optional, for rankings)
 
 Run with:  streamlit run streamlit_arxiv_digest.py
 """
@@ -21,7 +23,8 @@ from datetime import date, datetime, timedelta
 from typing import List, Tuple
 
 import arxiv  # pip install arxiv
-import google.generativeai as genai  # pip install google-generativeai
+import requests  # pip install requests
+import json
 import streamlit as st  # pip install streamlit
 from dotenv import load_dotenv  # pip install python-dotenv
 from sendgrid import SendGridAPIClient  # pip install sendgrid
@@ -33,28 +36,26 @@ load_dotenv()
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-GEMINI_MODEL = "gemini-2.0-flash-exp"  # Google Gemini Flash 2.0
+GEMINI_MODEL = "google/gemini-2.0-flash-001"  # OpenRouter Gemini Flash 2.0
 DEFAULT_KEYWORDS = "artificial intelligence, machine learning, computer vision, NLP"
 MAX_RESULTS = 20  # safety cap
 DEFAULT_FROM_EMAIL = "digest@artefact.ai"
 
-# Initialize Google Gemini
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
+# OpenRouter API configuration
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+OPENROUTER_SITE_URL = os.getenv("OPENROUTER_SITE_URL", "")
+OPENROUTER_SITE_NAME = os.getenv("OPENROUTER_SITE_NAME", "ArXiv Daily Digest")
 
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 FROM_EMAIL = os.getenv("FROM_EMAIL", DEFAULT_FROM_EMAIL)
 
 
 def summarise_abstract(abstract: str) -> str:
-    """Call Google Gemini to compress an abstract into <=120 words consultancy‑style."""
-    if not GOOGLE_API_KEY:
-        return "⚠️ Google API key not configured. Please set GOOGLE_API_KEY in your environment."
+    """Call Google Gemini via OpenRouter to compress an abstract into <=120 words consultancy‑style."""
+    if not OPENROUTER_API_KEY:
+        return "⚠️ OpenRouter API key not configured. Please set OPENROUTER_API_KEY in your environment."
     
     try:
-        model = genai.GenerativeModel(GEMINI_MODEL)
-        
         prompt = f"""You are an expert ML analyst. Summarise the following research abstract in <=120 words, 
         bullet style, focusing on contribution and why it matters. Avoid jargon and make it accessible.
 
@@ -65,14 +66,53 @@ def summarise_abstract(abstract: str) -> str:
         • Why it matters/potential impact
         • Technical approach (simplified)"""
         
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.3,
-                max_output_tokens=200,
-            )
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        
+        # Add optional headers if configured
+        if OPENROUTER_SITE_URL:
+            headers["HTTP-Referer"] = OPENROUTER_SITE_URL
+        if OPENROUTER_SITE_NAME:
+            headers["X-Title"] = OPENROUTER_SITE_NAME
+        
+        data = {
+            "model": GEMINI_MODEL,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "temperature": 0.3,
+            "max_tokens": 200,
+        }
+        
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            data=json.dumps(data),
+            timeout=30
         )
-        return response.text.strip()
+        
+        if response.status_code != 200:
+            return f"❌ API Error {response.status_code}: {response.text}"
+        
+        response_data = response.json()
+        
+        if "error" in response_data:
+            return f"❌ OpenRouter Error: {response_data['error'].get('message', 'Unknown error')}"
+        
+        if "choices" in response_data and len(response_data["choices"]) > 0:
+            return response_data["choices"][0]["message"]["content"].strip()
+        else:
+            return "❌ No response content received from OpenRouter API"
+            
+    except requests.exceptions.Timeout:
+        return "❌ Request timeout - try again later"
+    except requests.exceptions.RequestException as e:
+        return f"❌ Network error: {str(e)}"
     except Exception as e:
         return f"❌ Error generating summary: {str(e)}"
 
@@ -173,11 +213,12 @@ with st.sidebar:
     st.header("⚙️ Configuration")
     
     # API Key status
-    if GOOGLE_API_KEY:
-        st.success("✅ Google API configured")
+    if OPENROUTER_API_KEY:
+        st.success("✅ OpenRouter API configured")
+        st.info(f"Using model: {GEMINI_MODEL}")
     else:
-        st.error("❌ Google API key missing")
-        st.info("Set GOOGLE_API_KEY in your .env file")
+        st.error("❌ OpenRouter API key missing")
+        st.info("Set OPENROUTER_API_KEY in your .env file")
     
     if SENDGRID_API_KEY:
         st.success("✅ SendGrid configured")
@@ -226,8 +267,8 @@ if generate:
         st.error("Please enter a valid email address.")
         st.stop()
     
-    if not GOOGLE_API_KEY:
-        st.error("Google API key not configured. Please set GOOGLE_API_KEY in your environment.")
+    if not OPENROUTER_API_KEY:
+        st.error("OpenRouter API key not configured. Please set OPENROUTER_API_KEY in your environment.")
         st.stop()
 
     # Search for papers
@@ -303,7 +344,7 @@ if generate:
             html_parts.append("""
                 <hr style="border: 1px solid #e0e0e0; margin: 30px 0;">
                 <p style="text-align: center; color: #9aa0a6; font-size: 12px;">
-                    Generated by ArXiv Digest App • Powered by Google Gemini
+                    Generated by ArXiv Digest App • Powered by Google Gemini via OpenRouter
                 </p>
                 </div>
             """)

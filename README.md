@@ -1,11 +1,11 @@
 # ArXiv Daily Digest App
 
-A minimal Streamlit application that generates personalized daily digests of Computer Science research papers from arXiv, with AI-powered summaries using Google Gemini Flash 2.0.
+A minimal Streamlit application that generates personalized daily digests of Computer Science research papers from arXiv, with AI-powered summaries using Google Gemini Flash 2.0 via OpenRouter.
 
 ## Features
 
 - 🔍 **Smart Search**: Query arXiv for recent CS papers using customizable keywords
-- 🤖 **AI Summaries**: Generate concise, accessible summaries using Google Gemini Flash 2.0
+- 🤖 **AI Summaries**: Generate concise, accessible summaries using Google Gemini Flash 2.0 via OpenRouter
 - 📧 **Email Delivery**: Send formatted digests via SendGrid
 - 📱 **Responsive UI**: Clean, modern Streamlit interface
 - 💾 **Download Options**: Export digests as text files
@@ -27,16 +27,18 @@ cp .env.example .env
 ```
 
 Required variables:
-- `GOOGLE_API_KEY`: Your Google Gemini API key
+- `OPENROUTER_API_KEY`: Your OpenRouter API key for Gemini Flash access
 - `SENDGRID_API_KEY`: Your SendGrid API key (optional, for email)
+- `OPENROUTER_SITE_URL`: Your site URL (optional, for rankings)
+- `OPENROUTER_SITE_NAME`: Your site name (optional, for rankings)  
 - `FROM_EMAIL`: Sender email address (optional, defaults to digest@artefact.ai)
 
 ### 3. Get API Keys
 
-**Google Gemini API:**
-1. Visit [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. Create a new API key
-3. Add it to your `.env` file
+**OpenRouter API (for Gemini Flash):**
+1. Sign up at [OpenRouter](https://openrouter.ai/)
+2. Create an API key in your account settings
+3. Add it to your `.env` file as `OPENROUTER_API_KEY`
 
 **SendGrid API (Optional):**
 1. Sign up at [SendGrid](https://sendgrid.com/)
@@ -88,13 +90,13 @@ artificial intelligence, machine learning, computer vision, NLP, robotics
 
 ### Core Components
 - **arxiv**: Paper search and retrieval
-- **google-generativeai**: AI-powered abstract summarization
+- **requests**: HTTP client for OpenRouter API calls
 - **streamlit**: Web interface and user interaction
 - **sendgrid**: Email delivery service
 - **python-dotenv**: Environment variable management
 
 ### Summary Generation
-The app uses Google Gemini Flash 2.0 with optimized prompts to generate:
+The app uses Google Gemini Flash 2.0 via OpenRouter with optimized prompts to generate:
 - ≤120 word summaries
 - Bullet-point format
 - Focus on contribution and impact
@@ -111,9 +113,9 @@ HTML emails include:
 
 ### Common Issues
 
-**"Google API key not configured"**
-- Ensure `GOOGLE_API_KEY` is set in your `.env` file
-- Verify the API key is valid and has Gemini access
+**"OpenRouter API key not configured"**
+- Ensure `OPENROUTER_API_KEY` is set in your `.env` file
+- Verify the API key is valid and has sufficient credits
 
 **"No papers found"**
 - Try broader keywords or longer search timeframe
@@ -150,7 +152,7 @@ The app is designed for easy extension:
 - **Styling**: Customize CSS in the Streamlit components
 
 ### API Limits
-- **Google Gemini**: Check your quota and rate limits
+- **OpenRouter**: Pay-per-use model, check your credits and rate limits
 - **arXiv**: Respectful usage, max 3 requests per second
 - **SendGrid**: Free tier allows 100 emails/day
 
@@ -167,4 +169,4 @@ For issues and questions:
 
 ---
 
-**Built with ❤️ using Streamlit and Google Gemini**
+**Built with ❤️ using Streamlit and Google Gemini via OpenRouter**
