@@ -117,40 +117,118 @@ def summarise_abstract(abstract: str) -> str:
         return f"❌ Error generating summary: {str(e)}"
 
 
-def fetch_papers(keywords: str, max_papers: int, days_back: int = 1) -> List[arxiv.Result]:
-    """Search arXiv Computer Science papers from recent days using keyword query."""
+def calculate_paper_score(paper: arxiv.Result, priority_keywords: List[str], 
+                         priority_sources: List[str] = None) -> float:
+    """Calculate a relevance score for paper prioritization."""
+    score = 0.0
+    
+    # Base score from recency (newer = higher score)
+    days_old = (datetime.now().replace(tzinfo=None) - paper.published.replace(tzinfo=None)).days
+    recency_score = max(0, 7 - days_old) / 7  # Higher score for papers within 7 days
+    score += recency_score * 2
+    
+    # Keyword relevance in title (higher weight)
+    title_lower = paper.title.lower()
+    for keyword in priority_keywords:
+        if keyword.lower() in title_lower:
+            score += 3
+    
+    # Keyword relevance in abstract
+    abstract_lower = paper.summary.lower()
+    for keyword in priority_keywords:
+        if keyword.lower() in abstract_lower:
+            score += 1
+    
+    # Author count as proxy for collaboration/institution backing
+    author_score = min(len(paper.authors) / 10, 1.0)  # Cap at 1.0
+    score += author_score
+    
+    # Prefer papers from priority sources
+    if priority_sources:
+        sources = priority_sources
+    else:
+        sources = ['google', 'openai', 'microsoft', 'meta', 'deepmind', 'anthropic', 
+                  'stanford', 'mit', 'berkeley', 'cmu', 'oxford', 'cambridge']
+    
+    author_text = ' '.join([author.name.lower() for author in paper.authors])
+    for source in sources:
+        if source.lower().strip() in author_text:
+            score += 2  # Higher boost for priority sources
+            break
+    
+    return score
+
+
+def fetch_papers(keywords: str, max_papers: int, days_back: int = 1, 
+                categories: List[str] = None, sort_by_relevance: bool = True,
+                priority_sources: str = "") -> List[arxiv.Result]:
+    """Search arXiv Computer Science papers with smart filtering and ranking."""
     # Create date filter for recent papers
     cutoff_date = datetime.now() - timedelta(days=days_back)
     
+    # Default to key CS categories if none specified
+    if not categories:
+        categories = [
+            "cs.AI",    # Artificial Intelligence
+            "cs.LG",    # Machine Learning  
+            "cs.CV",    # Computer Vision
+            "cs.CL",    # Computation and Language (NLP)
+            "cs.RO",    # Robotics
+            "cs.CR",    # Cryptography and Security
+            "cs.HC",    # Human-Computer Interaction
+            "cs.IR",    # Information Retrieval
+        ]
+    
     # Build query with category filter and keywords
     query_parts = []
+    
+    # Add category filter
+    if categories:
+        category_query = " OR ".join([f"cat:{cat}" for cat in categories])
+        query_parts.append(f"({category_query})")
+    else:
+        query_parts.append("cat:cs.*")
+    
+    # Add keyword filter if provided
     if keywords.strip():
-        # Split keywords and create OR query
         keyword_list = [kw.strip() for kw in keywords.split(',') if kw.strip()]
         keyword_query = ' OR '.join(f'"{kw}"' for kw in keyword_list)
         query_parts.append(f"({keyword_query})")
     
-    # Add Computer Science category filter
-    query_parts.append("cat:cs.*")
-    
     query = " AND ".join(query_parts)
+    
+    # Fetch more papers than needed for filtering
+    search_limit = max_papers * 3  # Get 3x more for better filtering
     
     search = arxiv.Search(
         query=query,
-        max_results=max_papers,
+        max_results=search_limit,
         sort_by=arxiv.SortCriterion.SubmittedDate,
         sort_order=arxiv.SortOrder.Descending,
     )
     
-    # Filter papers by submission date
-    papers = []
+    # Filter papers by submission date and calculate scores
+    papers_with_scores = []
+    priority_keywords = [kw.strip() for kw in keywords.split(',') if kw.strip()] if keywords.strip() else []
+    priority_source_list = [src.strip() for src in priority_sources.split(',') if src.strip()] if priority_sources else None
+    
     for paper in search.results():
         if paper.published.replace(tzinfo=None) >= cutoff_date:
-            papers.append(paper)
-        if len(papers) >= max_papers:
+            if sort_by_relevance:
+                score = calculate_paper_score(paper, priority_keywords, priority_source_list)
+                papers_with_scores.append((paper, score))
+            else:
+                papers_with_scores.append((paper, 0))
+        
+        if len(papers_with_scores) >= search_limit:
             break
     
-    return papers
+    # Sort by relevance score if enabled
+    if sort_by_relevance:
+        papers_with_scores.sort(key=lambda x: x[1], reverse=True)
+    
+    # Return top papers
+    return [paper for paper, score in papers_with_scores[:max_papers]]
 
 
 def send_email(to_email: str, subject: str, html_body: str) -> bool:
@@ -225,6 +303,90 @@ with st.sidebar:
     else:
         st.warning("⚠️ SendGrid not configured")
         st.info("Email delivery disabled")
+    
+    st.markdown("---")
+    
+    # Daily Digest Targeting
+    st.header("🎯 Daily Digest Settings")
+    
+    # Category selection
+    st.subheader("📚 ArXiv Categories")
+    category_options = {
+        "cs.AI": "🤖 Artificial Intelligence",
+        "cs.LG": "🧠 Machine Learning", 
+        "cs.CV": "👁️ Computer Vision",
+        "cs.CL": "🗣️ Natural Language Processing",
+        "cs.RO": "🤖 Robotics",
+        "cs.CR": "🔒 Cryptography & Security",
+        "cs.HC": "👥 Human-Computer Interaction",
+        "cs.IR": "🔍 Information Retrieval",
+        "cs.NE": "🧬 Neural & Evolutionary Computing",
+        "cs.DC": "💻 Distributed Computing",
+    }
+    
+    selected_categories = st.multiselect(
+        "Select categories to monitor:",
+        options=list(category_options.keys()),
+        default=["cs.AI", "cs.LG", "cs.CV", "cs.CL"],
+        format_func=lambda x: category_options[x],
+        help="Choose which ArXiv categories to include in your daily digest"
+    )
+    
+    # Smart filtering options
+    st.subheader("🧠 Smart Filtering")
+    sort_by_relevance = st.checkbox(
+        "Enable relevance scoring",
+        value=True,
+        help="Prioritize papers by keyword relevance, recency, and author reputation"
+    )
+    
+    # Priority institutions/companies
+    st.subheader("🏢 Priority Sources")
+    priority_sources = st.text_input(
+        "Priority institutions/companies:",
+        value="google, openai, anthropic, deepmind",
+        help="Comma-separated list of preferred authors/institutions (will boost paper scores)"
+    )
+    
+    st.markdown("---")
+    
+    # Daily automation settings
+    st.header("⏰ Daily Automation")
+    st.info("💡 **Pro Tip**: For daily automation, save these settings and run via cron job or GitHub Actions")
+    
+    # Export configuration
+    if st.button("📋 Export Config for Automation", help="Generate command for daily automation"):
+        config = {
+            "keywords": keywords if 'keywords' in locals() else DEFAULT_KEYWORDS,
+            "categories": selected_categories,
+            "max_papers": max_papers if 'max_papers' in locals() else 5,
+            "days_back": days_back if 'days_back' in locals() else 1,
+            "sort_by_relevance": sort_by_relevance,
+            "priority_sources": priority_sources,
+            "email": email if 'email' in locals() else ""
+        }
+        
+        st.code(f"""
+# Daily ArXiv Digest Automation Config
+# Save this as config.json and use with automation script
+
+{json.dumps(config, indent=2)}
+        """, language="json")
+        
+        # Generate automation command
+        automation_cmd = f"""
+# Example cron job (runs daily at 8 AM):
+# 0 8 * * * cd /path/to/arxiv-digest && python daily_digest.py
+
+python daily_digest.py \\
+  --keywords "{config['keywords']}" \\
+  --categories "{','.join(config['categories'])}" \\
+  --max-papers {config['max_papers']} \\
+  --email "{config['email']}" \\
+  --priority-sources "{config['priority_sources']}"
+        """
+        
+        st.code(automation_cmd, language="bash")
 
 # Main form
 col1, col2 = st.columns([2, 1])
@@ -271,9 +433,16 @@ if generate:
         st.error("OpenRouter API key not configured. Please set OPENROUTER_API_KEY in your environment.")
         st.stop()
 
-    # Search for papers
+    # Search for papers with smart filtering
     with st.spinner("🔎 Searching arXiv for recent papers..."):
-        papers = fetch_papers(keywords, max_papers, days_back)
+        papers = fetch_papers(
+            keywords=keywords, 
+            max_papers=max_papers, 
+            days_back=days_back,
+            categories=selected_categories if selected_categories else None,
+            sort_by_relevance=sort_by_relevance,
+            priority_sources=priority_sources
+        )
     
     if not papers:
         st.warning(f"No matching papers found in the last {days_back} day(s). Try adjusting your keywords or extending the search period.")

@@ -54,34 +54,109 @@ The app will open in your browser at `http://localhost:8501`
 
 ## Usage
 
+### Interactive Mode (Web App)
 1. **Enter your email** (required for digest delivery)
 2. **Customize keywords** (default: AI, ML, Computer Vision, NLP)
-3. **Set paper count** (1-20 papers)
-4. **Choose search timeframe** (last 1-7 days)
-5. **Click "Generate & Send Digest"**
+3. **Select ArXiv categories** from the sidebar
+4. **Set paper count** (1-20 papers)
+5. **Choose search timeframe** (last 1-7 days)
+6. **Configure priority sources** (institutions/companies)
+7. **Click "Generate & Send Digest"**
 
-The app will:
-- Search arXiv for matching papers
-- Generate AI summaries for each abstract
-- Display results in a clean interface
-- Send formatted email digest (if configured)
-- Provide download option for text export
+### Daily Automation
+For automated daily digests, you have several options:
+
+**Option 1: Standalone Script**
+```bash
+python daily_digest.py \
+  --email your@email.com \
+  --keywords "AI, machine learning, robotics" \
+  --categories "cs.AI,cs.LG,cs.RO" \
+  --max-papers 5
+```
+
+**Option 2: Configuration File**
+```bash
+# Create config.json with your settings
+cp config.example.json config.json
+# Edit config.json with your preferences
+python daily_digest.py --config config.json
+```
+
+**Option 3: Cron Job (Linux/Mac)**
+```bash
+# Add to crontab for daily 8 AM delivery
+0 8 * * * cd /path/to/ArxivTLDR && python daily_digest.py --config config.json
+```
+
+**Option 4: GitHub Actions (Cloud)**
+- Fork this repository
+- Add secrets: `OPENROUTER_API_KEY`, `SENDGRID_API_KEY`
+- Create `config.json` with your settings
+- Enable GitHub Actions for automated daily delivery
 
 ## Configuration Options
 
-### Keywords
+### Smart Paper Selection
+
+The app uses multiple strategies to identify the most relevant papers for your daily digest:
+
+#### 1. **Category Filtering**
+Choose specific ArXiv categories to monitor:
+- `cs.AI` - Artificial Intelligence
+- `cs.LG` - Machine Learning
+- `cs.CV` - Computer Vision
+- `cs.CL` - Natural Language Processing
+- `cs.RO` - Robotics
+- `cs.CR` - Cryptography & Security
+- `cs.HC` - Human-Computer Interaction
+- `cs.IR` - Information Retrieval
+
+#### 2. **Relevance Scoring**
+Papers are automatically scored based on:
+- **Keyword Match**: Higher score for keywords in title vs abstract
+- **Recency**: Newer papers get priority
+- **Author Reputation**: Papers from top institutions/companies
+- **Collaboration**: Multi-author papers often indicate larger projects
+
+#### 3. **Priority Sources**
+Boost papers from preferred institutions:
+```
+google, openai, anthropic, deepmind, stanford, mit, berkeley, cmu
+```
+
+#### 4. **Daily Targeting Strategies**
+
+**For Industry Professionals:**
+- Keywords: `"large language models", "production ML", "AI systems"`
+- Categories: `cs.AI, cs.LG, cs.SE`
+- Priority: `google, microsoft, meta, openai`
+
+**For Researchers:**
+- Keywords: `"neural networks", "optimization", "theoretical"`
+- Categories: `cs.AI, cs.LG, cs.NE, cs.CC`
+- Priority: `stanford, mit, berkeley, cmu`
+
+**For Product Builders:**
+- Keywords: `"applications", "deployment", "real-world"`
+- Categories: `cs.AI, cs.HC, cs.IR, cs.CV`
+- Priority: `google, microsoft, uber, airbnb`
+
+### Search Configuration
+
+#### Keywords
 Comma-separated list of research topics:
 ```
 artificial intelligence, machine learning, computer vision, NLP, robotics
 ```
 
-### Search Timeframe
+#### Search Timeframe
 - Last 1 day (default)
 - Last 2 days
 - Last 3 days
 - Last 7 days
 
-### Paper Limits
+#### Paper Limits
 - Minimum: 1 paper
 - Maximum: 20 papers
 - Default: 5 papers
