@@ -47,7 +47,9 @@ OPENROUTER_SITE_URL = os.getenv("OPENROUTER_SITE_URL", "")
 OPENROUTER_SITE_NAME = os.getenv("OPENROUTER_SITE_NAME", "ArXiv Daily Digest")
 
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-FROM_EMAIL = os.getenv("FROM_EMAIL", DEFAULT_FROM_EMAIL)
+GMAIL_USER = os.getenv("GMAIL_USER")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
+FROM_EMAIL = os.getenv("FROM_EMAIL", GMAIL_USER or DEFAULT_FROM_EMAIL)
 
 
 def summarise_abstract(abstract: str) -> str:
@@ -231,17 +233,124 @@ def fetch_papers(keywords: str, max_papers: int, days_back: int = 1,
     return [paper for paper, score in papers_with_scores[:max_papers]]
 
 
-def send_email(to_email: str, subject: str, html_body: str, verbose: bool = False) -> bool:
-    """Send email via SendGrid with comprehensive error handling and logging."""
-    if not SENDGRID_API_KEY:
+def send_email_gmail(to_email: str, subject: str, html_body: str, verbose: bool = False) -> bool:
+    """Send email using Gmail SMTP with SSL certificate fix for macOS."""
+    import smtplib
+    import ssl
+    import os
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    
+    if not GMAIL_USER or not GMAIL_APP_PASSWORD:
         if verbose:
-            print("❌ SENDGRID_API_KEY not set – skipping email")
+            print("❌ Gmail credentials not found")
+            print("💡 Add GMAIL_USER and GMAIL_APP_PASSWORD to your .env file")
         else:
-            st.error("SENDGRID_API_KEY not set – skipping email")
+            st.error("Gmail credentials not configured")
         return False
     
     try:
-        # Create SendGrid client
+        # Create message
+        message = MIMEMultipart("alternative")
+        message["Subject"] = subject
+        message["From"] = GMAIL_USER
+        message["To"] = to_email
+        
+        # Add HTML content
+        html_part = MIMEText(html_body, "html")
+        message.attach(html_part)
+        
+        # Create SSL context with certificate fix for macOS
+        context = ssl.create_default_context()
+        
+        # Try to use certifi certificates
+        try:
+            import certifi
+            context.load_verify_locations(certifi.where())
+            if verbose:
+                print(f"📋 Using certifi certificates: {certifi.where()}")
+        except ImportError:
+            if verbose:
+                print("⚠️ Certifi not available, using default certificates")
+        
+        # Set SSL environment variables for this session
+        os.environ['SSL_CERT_FILE'] = certifi.where() if 'certifi' in locals() else ''
+        os.environ['REQUESTS_CA_BUNDLE'] = certifi.where() if 'certifi' in locals() else ''
+        
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=context) as server:
+            server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+            server.sendmail(GMAIL_USER, to_email, message.as_string())
+        
+        if verbose:
+            print("✅ Email sent successfully via Gmail!")
+        return True
+        
+    except Exception as e:
+        error_msg = str(e)
+        if verbose:
+            if "authentication failed" in error_msg.lower():
+                print("❌ Gmail authentication failed")
+                print("💡 Make sure you're using an App Password, not your regular password")
+            else:
+                print(f"❌ Gmail SMTP error: {error_msg}")
+        else:
+            if "authentication failed" in error_msg.lower():
+                st.error("Gmail authentication failed. Use App Password, not regular password.")
+            else:
+                st.error(f"Gmail error: {error_msg}")
+        return False
+
+
+def send_email(to_email: str, subject: str, html_body: str, verbose: bool = False) -> bool:
+    """Send email via Gmail (preferred) or SendGrid fallback."""
+    
+    # Try Gmail first (easier setup, no SSL issues)
+    if GMAIL_USER and GMAIL_APP_PASSWORD:
+        if verbose:
+            print("📧 Using Gmail SMTP...")
+        return send_email_gmail(to_email, subject, html_body, verbose)
+    
+    # Fallback to SendGrid
+    elif SENDGRID_API_KEY:
+        if verbose:
+            print("📧 Using SendGrid API...")
+        return send_email_sendgrid(to_email, subject, html_body, verbose)
+    
+    # No email service configured
+    else:
+        if verbose:
+            print("❌ No email service configured")
+            print("💡 Set up Gmail (easier) or SendGrid in your .env file")
+        else:
+            st.error("No email service configured. Set up Gmail or SendGrid in .env file.")
+        return False
+
+
+def send_email_sendgrid(to_email: str, subject: str, html_body: str, verbose: bool = False) -> bool:
+    """Send email via SendGrid with comprehensive error handling and logging."""
+    if not SENDGRID_API_KEY:
+        if verbose:
+            print("❌ SENDGRID_API_KEY not set")
+        else:
+            st.error("SENDGRID_API_KEY not set")
+        return False
+    
+    try:
+        # Create SendGrid client with SSL handling for macOS certificate issues
+        import ssl
+        import urllib3
+        
+        # Disable SSL warnings for certificate issues
+        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        
+        # Try to create a permissive SSL context for macOS certificate issues
+        try:
+            ssl_context = ssl.create_default_context()
+            ssl_context.check_hostname = False
+            ssl_context.verify_mode = ssl.CERT_NONE
+        except Exception:
+            pass  # Fall back to default behavior
+        
         sg = SendGridAPIClient(api_key=SENDGRID_API_KEY)
         
         # Create mail object
@@ -345,8 +454,13 @@ with st.sidebar:
         st.error("❌ OpenRouter API key missing")
         st.info("Set OPENROUTER_API_KEY in your .env file")
     
-    if SENDGRID_API_KEY:
+    # Email service status
+    if GMAIL_USER and GMAIL_APP_PASSWORD:
+        st.success("✅ Gmail SMTP configured")
+        st.info("📧 Using Gmail for email delivery")
+    elif SENDGRID_API_KEY:
         st.success("✅ SendGrid configured")
+        st.info("📧 Using SendGrid for email delivery")
         
         # Test email functionality
         with st.expander("🧪 Test Email Configuration"):

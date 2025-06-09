@@ -122,7 +122,7 @@ def generate_daily_digest(
 
 def main():
     parser = argparse.ArgumentParser(description="Generate daily ArXiv digest")
-    parser.add_argument("--email", required=True, help="Email address to send digest to")
+    parser.add_argument("--email", help="Email address to send digest to")
     parser.add_argument("--config", help="Path to JSON config file")
     parser.add_argument("--keywords", default="artificial intelligence, machine learning, computer vision, NLP")
     parser.add_argument("--categories", help="Comma-separated list of categories (e.g., cs.AI,cs.LG)")
@@ -136,13 +136,13 @@ def main():
     # Load config if provided
     if args.config:
         config = load_config(args.config)
-        # Override with config values
-        email = config.get("email", args.email)
-        keywords = config.get("keywords", args.keywords)
+        # Use config values with command line overrides
+        email = args.email or config.get("email")
+        keywords = args.keywords if args.keywords != parser.get_default("keywords") else config.get("keywords", args.keywords)
         categories = config.get("categories", None)
-        max_papers = config.get("max_papers", args.max_papers)
-        days_back = config.get("days_back", args.days_back)
-        priority_sources = config.get("priority_sources", args.priority_sources)
+        max_papers = args.max_papers if args.max_papers != parser.get_default("max_papers") else config.get("max_papers", args.max_papers)
+        days_back = args.days_back if args.days_back != parser.get_default("days_back") else config.get("days_back", args.days_back)
+        priority_sources = args.priority_sources if args.priority_sources != parser.get_default("priority_sources") else config.get("priority_sources", args.priority_sources)
         sort_by_relevance = config.get("sort_by_relevance", not args.no_relevance_sort)
     else:
         email = args.email
@@ -152,6 +152,12 @@ def main():
         days_back = args.days_back
         priority_sources = args.priority_sources
         sort_by_relevance = not args.no_relevance_sort
+    
+    # Validate email is provided
+    if not email:
+        print("❌ Email address is required")
+        print("💡 Provide --email argument or set 'email' in config file")
+        sys.exit(1)
     
     # Check required environment variables
     if not os.getenv("OPENROUTER_API_KEY"):
