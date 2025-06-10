@@ -1,0 +1,9 @@
+{
+  "email": "harry.morphakis@artefact.com",
+  "keywords": "artificial intelligence, machine learning, computer vision, NLP, robotics",
+  "categories": ["cs.AI", "cs.LG", "cs.CV", "cs.CL", "cs.RO"],
+  "max_papers": 20,
+  "days_back": 7,
+  "sort_by_relevance": true,
+  "priority_sources": "google, openai, anthropic, deepmind, stanford, mit"
+}

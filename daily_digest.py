@@ -39,8 +39,8 @@ def generate_daily_digest(
     email: str,
     keywords: str = "artificial intelligence, machine learning, computer vision, NLP",
     categories: List[str] = None,
-    max_papers: int = 5,
-    days_back: int = 1,
+    max_papers: int = 20,
+    days_back: int = 7,
     sort_by_relevance: bool = True,
     priority_sources: str = "google, openai, anthropic, deepmind"
 ) -> bool:
@@ -126,8 +126,8 @@ def main():
     parser.add_argument("--config", help="Path to JSON config file")
     parser.add_argument("--keywords", default="artificial intelligence, machine learning, computer vision, NLP")
     parser.add_argument("--categories", help="Comma-separated list of categories (e.g., cs.AI,cs.LG)")
-    parser.add_argument("--max-papers", type=int, default=5, help="Maximum number of papers")
-    parser.add_argument("--days-back", type=int, default=1, help="Days to look back for papers")
+    parser.add_argument("--max-papers", type=int, default=20, help="Maximum number of papers")
+    parser.add_argument("--days-back", type=int, default=7, help="Days to look back for papers")
     parser.add_argument("--priority-sources", default="google, openai, anthropic, deepmind")
     parser.add_argument("--no-relevance-sort", action="store_true", help="Disable relevance sorting")
     
