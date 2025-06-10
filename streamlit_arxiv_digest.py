@@ -414,13 +414,15 @@ def format_paper_html(paper: arxiv.Result, summary: str) -> str:
     if len(paper.authors) > 3:
         authors += " et al."
     
+    formatted_summary = summary.replace('\n', '<br>')
+    
     return f"""
     <div style="margin-bottom: 30px; padding: 20px; border-left: 4px solid #4285f4; background-color: #f8f9fa;">
         <h3 style="margin-top: 0; color: #1a73e8;">{paper.title}</h3>
         <p style="color: #5f6368; margin: 5px 0;"><strong>Authors:</strong> {authors}</p>
         <p style="color: #5f6368; margin: 5px 0;"><strong>Published:</strong> {paper.published.strftime('%Y-%m-%d')}</p>
         <div style="margin: 15px 0;">
-            {summary.replace('\n', '<br>')}
+            {formatted_summary}
         </div>
         <p style="margin-top: 15px;">
             <a href="{paper.pdf_url}" style="color: #1a73e8; text-decoration: none; margin-right: 15px;">📄 PDF</a>
